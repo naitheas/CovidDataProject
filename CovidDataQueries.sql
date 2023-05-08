@@ -1,42 +1,57 @@
-SELECT iso_code, location
-FROM CovidProject..CovidDeathsData
-ORDER BY 1,2;
+--Standardize Date Format for aggregation
+ALTER TABLE CovidProject..CovidDeathsData
+Add ConvertedDate Date;
+
+UPDATE CovidProject..CovidDeathsData
+SET ConvertedDate = CONVERT(DATE,date);
+
+SELECT * FROM CovidProject..CovidDeathsData;
+
+ALTER TABLE CovidProject..CovidVaccinationsData
+Add ConvertedDate Date;
+
+UPDATE CovidProject..CovidVaccinationsData
+SET ConvertedDate = CONVERT(DATE,date);
+
+
 
 --Query Total Cases VS Total Deaths to determine percentage of cases resulting in death
 --Shows possible risk of death by contracting covid by percentage
-SELECT iso_code, location, date, total_cases, total_deaths,ROUND(total_deaths/total_cases,4) *100 
+SELECT SUM(total_cases) AS Total_Cases, SUM(total_deaths) AS Total_Deaths, SUM(total_deaths)/SUM(total_cases) * 100 
 AS DeathPercentage
 FROM CovidProject..CovidDeathsData
 WHERE total_deaths is not null
-AND continent is not null
-ORDER BY 1,2;
+AND continent is not null;
+
 
 CREATE VIEW CasesVSDeathsPercentage AS
-SELECT iso_code, location, date, total_cases, total_deaths,ROUND(total_deaths/total_cases,4) *100 
+SELECT SUM(total_cases) AS Total_Cases, SUM(total_deaths) AS Total_Deaths, SUM(total_deaths)/SUM(total_cases) * 100 
 AS DeathPercentage
 FROM CovidProject..CovidDeathsData
 WHERE total_deaths is not null
 AND continent is not null;
 
 --Query percentage of confirmed cases of covid by population
-SELECT location, date, total_cases, population, ROUND(total_cases/population,4)*100
-AS ConfirmedPercentage
+SELECT location, MAX(total_cases) AS confirmed_cases, population, MAX(total_cases/population) *100
+AS ConfirmedPercentage, ConvertedDate
 FROM CovidProject..CovidDeathsData
 WHERE total_cases is not null
 AND continent is not null
-ORDER BY 1,2;
+GROUP BY location, population, ConvertedDate;
+
 
 CREATE VIEW ConfirmedCasesByPopulation AS
-SELECT location, date, total_cases, population, ROUND(total_cases/population,4)*100
-AS ConfirmedPercentage
+SELECT location, MAX(total_cases) AS confirmed_cases, population, MAX(total_cases/population) *100
+AS ConfirmedPercentage, ConvertedDate
 FROM CovidProject..CovidDeathsData
 WHERE total_cases is not null
-AND continent is not null;
+AND continent is not null
+GROUP BY location, population, ConvertedDate;
 
 --Query by locations with highest infection rate to population
 SELECT location, population,MAX(total_cases) 
 AS PeakInfectionCount, 
-ROUND(MAX(total_cases/population),4)*100
+MAX(total_cases/population) *100
 AS InfectionRate
 FROM CovidProject..CovidDeathsData
 WHERE total_cases is not null
@@ -47,7 +62,7 @@ ORDER BY InfectionRate DESC;
 CREATE VIEW PopulationInfectionRate AS
 SELECT location, population,MAX(total_cases) 
 AS PeakInfectionCount, 
-ROUND(MAX(total_cases/population),4)*100
+MAX(total_cases/population) *100
 AS InfectionRate
 FROM CovidProject..CovidDeathsData
 WHERE total_cases is not null
@@ -55,7 +70,7 @@ AND continent is not null
 GROUP BY location, population;
 
 
---Query by locations with highest death count
+--Query by locations with highest death count per population
 SELECT location, MAX(total_deaths)
 AS TotalDeathCount
 FROM CovidProject..CovidDeathsData
@@ -72,139 +87,172 @@ WHERE total_deaths is not null
 AND continent is not null
 GROUP BY location;
 
---Query by continent with highest death count per population
+--Query by continent with highest total death count per population
 SELECT continent, MAX(total_deaths)
-AS TotalDeathCount
+AS HighestDeathCount
+FROM CovidProject..CovidDeathsData
+WHERE continent is not null
+GROUP BY continent
+ORDER BY HighestDeathCount DESC;
+
+
+CREATE VIEW HighestDeathCountByContinent AS
+SELECT continent, MAX(total_deaths)
+AS HighestDeathCount
+FROM CovidProject..CovidDeathsData
+WHERE continent is not null
+GROUP BY continent;
+
+--Query total deaths by continent
+SELECT continent, SUM(total_deaths) AS TotalDeathCount
 FROM CovidProject..CovidDeathsData
 WHERE continent is not null
 GROUP BY continent
 ORDER BY TotalDeathCount DESC;
 
-CREATE VIEW HighestDeathCounts AS
-SELECT continent, MAX(total_deaths)
-AS TotalDeathCount
+CREATE VIEW TotalDeathCountByContinent AS
+SELECT continent, SUM(total_deaths) AS TotalDeathCount
 FROM CovidProject..CovidDeathsData
 WHERE continent is not null
 GROUP BY continent;
 
+
+
 --Query total deaths by locations
-SELECT iso_code, location, SUM(total_deaths)
+SELECT location, SUM(total_deaths)
 AS TotalDeaths
 FROM CovidProject..CovidDeathsData
 WHERE total_deaths is not null
 AND continent is not null
-GROUP BY iso_code,location
-ORDER BY 3 DESC;
+GROUP BY location
+ORDER BY 2 DESC;
+
 
 CREATE VIEW TotalDeathsByLocation AS
-SELECT iso_code, location, SUM(total_deaths)
+SELECT location, SUM(total_deaths)
 AS TotalDeaths
 FROM CovidProject..CovidDeathsData
 WHERE total_deaths is not null
 AND continent is not null
-GROUP BY iso_code,location;
+GROUP BY location;
 
---Query rate of new deaths to new cases globally by iso_codes
-SELECT date, iso_code, SUM(new_cases) 
+--Query rate of new deaths to new cases globally by continent
+SELECT continent, SUM(new_cases) 
 AS total_new_cases, 
 SUM(new_deaths) 
 AS total_new_deaths, 
-ROUND(SUM(new_deaths)/SUM(new_cases),5) * 100
+SUM(new_deaths)/SUM(new_cases) * 100
 AS DeathPercentage
 FROM CovidProject..CovidDeathsData
 WHERE new_cases > 0 AND new_deaths > 0
-GROUP BY date, iso_code
-ORDER BY 1,2;
+AND continent is not null
+GROUP BY continent
+ORDER BY 2,1;
 
-CREATE VIEW GlobalNewDeathsByISO AS
-SELECT date, iso_code, SUM(new_cases) 
+CREATE VIEW GlobalNewDeathsByContinent AS
+SELECT continent, SUM(new_cases) 
 AS total_new_cases, 
 SUM(new_deaths) 
 AS total_new_deaths, 
-ROUND(SUM(new_deaths)/SUM(new_cases),5) * 100
+SUM(new_deaths)/SUM(new_cases) * 100
 AS DeathPercentage
 FROM CovidProject..CovidDeathsData
 WHERE new_cases > 0 AND new_deaths > 0
-GROUP BY date, iso_code;
+AND continent is not null
+GROUP BY continent;;
 
 --Query rate of new deaths to new cases global total
 SELECT SUM(new_cases) 
-AS total_new_cases, 
+AS total_cases, 
 SUM(new_deaths) 
-AS total_new_deaths, 
-ROUND(SUM(new_deaths)/SUM(new_cases),5) * 100
+AS total_deaths, 
+SUM(new_deaths)/SUM(new_cases) * 100
 AS DeathPercentage
 FROM CovidProject..CovidDeathsData
 WHERE new_cases > 0 AND new_deaths > 0;
 
-CREATE VIEW GlobalNewDeaths AS
+CREATE VIEW GlobalDeathPercentage AS
 SELECT SUM(new_cases) 
-AS total_new_cases, 
+AS total_cases, 
 SUM(new_deaths) 
-AS total_new_deaths, 
-ROUND(SUM(new_deaths)/SUM(new_cases),5) * 100
+AS total_deaths, 
+SUM(new_deaths)/SUM(new_cases) * 100
 AS DeathPercentage
 FROM CovidProject..CovidDeathsData
 WHERE new_cases > 0 AND new_deaths > 0;
 
 
 --Base Join table query
-SELECT deaths.continent, deaths.location, deaths.date, deaths.population, vacc.new_vaccinations
+SELECT deaths.continent, deaths.location, deaths.ConvertedDate, deaths.population, vacc.new_vaccinations
 FROM CovidProject..CovidDeathsData deaths
 JOIN CovidProject..CovidVaccinationsData vacc
 	ON deaths.location = vacc.location
-	AND deaths.iso_code = vacc.iso_code
-	AND deaths.date = vacc.date
+	AND deaths.ConvertedDate = vacc.ConvertedDate
 WHERE vacc.new_vaccinations is not null AND deaths.continent is not null
 ORDER BY 1,2,3;
 
 --Query global population versus new vaccinations administered daily
-With GlobalPopulationNewVaccs (Date, Location, Population, New_Vaccinations, Vaccination_Count)
+With GlobalPopulationVaccs (Date, Location, Population, Vaccination_Count)
 AS
-(SELECT deaths.date, deaths.location, deaths.population,vacc.new_vaccinations,
-SUM(CONVERT(BIGINT,vacc.new_vaccinations))
-OVER (PARTITION BY deaths.location ORDER BY deaths.location,deaths.date) AS vaccination_count
+(SELECT deaths.ConvertedDate, deaths.location, deaths.population,MAX(vacc.total_vaccinations)
+OVER (PARTITION BY deaths.location ORDER BY deaths.location, deaths.ConvertedDate) AS Vaccination_Count
 FROM CovidProject..CovidDeathsData deaths
 JOIN CovidProject..CovidVaccinationsData vacc
 	ON deaths.location = vacc.location
-	AND deaths.date = vacc.date
+	AND deaths.ConvertedDate = vacc.ConvertedDate
 )
-SELECT *, ROUND((Vaccination_Count/Population),4)*100 
+SELECT *, (Vaccination_Count/Population)*100 
 AS VaccinationPercentage
-FROM GlobalPopulationNewVaccs;
-
-CREATE VIEW GlobalPopulationNewVaccs AS
-SELECT deaths.date, deaths.location, deaths.population,vacc.new_vaccinations,
-SUM(CONVERT(BIGINT,vacc.new_vaccinations))
-OVER (PARTITION BY deaths.location ORDER BY deaths.location, deaths.date) AS vaccination_count
-FROM CovidProject..CovidDeathsData deaths
-JOIN CovidProject..CovidVaccinationsData vacc
-	ON deaths.location = vacc.location
-	AND deaths.date = vacc.date
-
-
---Query global population vaccinated
-With GlobalPopulationVaccs (Date, Location, Population, Total_Vaccinations, Vaccination_Count)
-AS
-(SELECT deaths.date, deaths.location, deaths.population,vacc.total_vaccinations,
-SUM(CONVERT(BIGINT,vacc.total_vaccinations))
-OVER (PARTITION BY deaths.location ORDER BY deaths.location, deaths.date) AS vaccination_count
-FROM CovidProject..CovidDeathsData deaths
-JOIN CovidProject..CovidVaccinationsData vacc
-	ON deaths.location = vacc.location
-	AND deaths.date = vacc.date
-)
-SELECT *, ROUND((Vaccination_Count/Population),4)*100 
-AS VaccinationPercentage
-FROM GlobalPopulationVaccs;
+FROM GlobalPopulationVaccs
+WHERE Vaccination_Count is not null;
 
 
 CREATE VIEW GlobalPopulationVaccs AS
-SELECT deaths.date, deaths.continent, deaths.location, deaths.population,vacc.total_vaccinations,
-SUM(CONVERT(BIGINT,vacc.total_vaccinations))
-OVER (PARTITION BY deaths.location ORDER BY deaths.location, deaths.date) AS vaccination_count
+(SELECT deaths.ConvertedDate, deaths.location, deaths.population,MAX(vacc.total_vaccinations)
+OVER (PARTITION BY deaths.location ORDER BY deaths.location, deaths.ConvertedDate) AS Vaccination_Count
 FROM CovidProject..CovidDeathsData deaths
 JOIN CovidProject..CovidVaccinationsData vacc
 	ON deaths.location = vacc.location
-	AND deaths.date = vacc.date
-WHERE deaths.continent is not null
+	AND deaths.ConvertedDate = vacc.ConvertedDate
+)
+SELECT *, (Vaccination_Count/Population)*100 
+AS VaccinationPercentage
+FROM GlobalPopulationVaccs
+WHERE Vaccination_Count is not null;
+
+
+--Temp table query to determine rolling count percentage of all vaccinations to population
+DROP TABLE IF EXISTS #PercentPopulationVaccinated
+CREATE TABLE #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+Location nvarchar(255),
+Date date,
+Population numeric,
+New_vaccinations numeric,
+RollingCountVaccinated numeric
+)
+
+INSERT INTO #PercentPopulationVaccinated
+SELECT deaths.continent, deaths.location, deaths.ConvertedDate, deaths.population, vacc.new_vaccinations, 
+SUM(CAST(vacc.new_vaccinations AS BIGINT)) OVER (PARTITION BY deaths.Location ORDER BY deaths.location, deaths.ConvertedDate) 
+AS RollingCountVaccinated
+FROM CovidProject..CovidDeathsData deaths
+JOIN CovidProject..CovidVaccinationsData vacc
+	ON deaths.location = vacc.location
+	AND deaths.ConvertedDate = vacc.ConvertedDate
+WHERE deaths.continent is not null 
+
+SELECT *, (RollingCountVaccinated/Population)*100
+AS RollingVaccinationPercentage
+FROM #PercentPopulationVaccinated
+
+CREATE VIEW PercentagePopulationVaccinated AS
+SELECT deaths.continent, deaths.location, deaths.ConvertedDate, deaths.population, vacc.new_vaccinations, 
+SUM(CONVERT(BIGINT,vacc.new_vaccinations)) OVER (PARTITION BY deaths.Location ORDER BY deaths.location, deaths.ConvertedDate) 
+AS RollingCountVaccinated
+FROM CovidProject..CovidDeathsData deaths
+Join CovidProject..CovidVaccinationsData vacc
+	ON deaths.location = vacc.location
+	and deaths.ConvertedDate = vacc.ConvertedDate
+WHERE deaths.continent is not null 
